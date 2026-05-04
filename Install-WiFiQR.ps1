@@ -1,6 +1,5 @@
 # ================================================
-#   WiFi QR Exporter - Bulletproof Installer
-#   GitHub: https://github.com/abdullahkhalidlaptop/win-wifi-pass-qr
+#   WiFi QR Exporter - Bulletproof Installer (FIXED)
 # ================================================
 
 $Repo   = "abdullahkhalidlaptop/win-wifi-pass-qr"
@@ -8,86 +7,100 @@ $Branch = "main"
 $Dest   = "$HOME\WiFiQR"
 $ShortcutName = "WiFi QR Exporter.lnk"
 
-Write-Host "`nWiFi QR Exporter Installer (Error-Free)" -ForegroundColor Cyan
+Write-Host "`nWiFi QR Exporter Installer (Fixed)" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor DarkGray
 
 # Ensure Desktop exists
-$Desktop = "$HOME\Desktop"
-if (-not (Test-Path $Desktop)) { mkdir -Force $Desktop | Out-Null }
+$Desktop = [Environment]::GetFolderPath("Desktop")
+if (-not (Test-Path $Desktop)) { New-Item -ItemType Directory -Force -Path $Desktop | Out-Null }
 
 # Clean existing install
 Write-Host "[+] Cleaning previous install..." -ForegroundColor Cyan
 Remove-Item -Path $Dest -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -Path "$Desktop\$ShortcutName" -Force -ErrorAction SilentlyContinue
 
-# Remove old profile function if exists
-$profilePath = $PROFILE
-if (Test-Path $profilePath) {
-    $profileContent = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
-    if ($profileContent -match 'function WiFiQR|& .*WiFiQR') {
-        $profileLines = Get-Content $profilePath | Where-Object { $_ -notmatch 'WiFiQR' }
-        Set-Content -Path $profilePath -Value $profileLines -Encoding UTF8
-        Write-Host "  ✓ Removed old WiFiQR function" -ForegroundColor Green
+# Ensure folder exists
+New-Item -ItemType Directory -Force -Path $Dest | Out-Null
+
+# Remove from PATH safely
+Write-Host "[+] Fixing PATH..." -ForegroundColor Cyan
+$currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($currentPath) {
+    $paths = $currentPath -split ";"
+    $paths = $paths | Where-Object { $_ -and ($_ -ne $Dest) }
+    [Environment]::SetEnvironmentVariable("PATH", ($paths -join ";"), "User")
+}
+
+# Clean profile safely (NO regex chaos)
+Write-Host "[+] Cleaning PowerShell profile..." -ForegroundColor Cyan
+if (Test-Path $PROFILE) {
+    $profileContent = Get-Content $PROFILE -ErrorAction SilentlyContinue
+    $filtered = $profileContent | Where-Object { $_ -notmatch "WiFiQR" }
+    Set-Content -Path $PROFILE -Value $filtered -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+
+# Download files
+Write-Host "[+] Downloading files..." -ForegroundColor Cyan
+$files = @("WiFiQR.ps1", "WiFiQR.bat", "WiFiQR-Silent.bat")
+
+foreach ($file in $files) {
+    $url = "https://raw.githubusercontent.com/$Repo/$Branch/$file"
+    try {
+        Invoke-RestMethod $url -OutFile "$Dest\$file"
+        Write-Host "  ✓ $file" -ForegroundColor Green
+    } catch {
+        Write-Host "  ✗ Failed: $file" -ForegroundColor Red
+        exit 1
     }
 }
 
-# Remove from PATH if exists
-$currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($currentPath -and $currentPath -match [regex]::Escape($Dest)) {
-    $newPath = $currentPath -replace [regex]::Escape("$Dest;?"), ""
-    [Environment]::SetEnvironmentVariable("PATH", $newPath.TrimEnd(';'), "User")
-    Write-Host "  ✓ Removed old PATH entry" -ForegroundColor Green
-}
-
-mkdir -Force $Dest | Out-Null
-
-Write-Host "[+] Downloading files..." -ForegroundColor Cyan
-$files = @("WiFiQR.ps1", "WiFiQR.bat", "WiFiQR-Silent.bat")
-foreach ($file in $files) {
-    $url = "https://raw.githubusercontent.com/$Repo/$Branch/$file"
-    irm $url -OutFile "$Dest\$file" -ErrorAction Stop
-    Write-Host "  ✓ $file" -ForegroundColor Green
-}
-
+# Install module
 Write-Host "[+] Installing QRCodeGenerator module..." -ForegroundColor Cyan
 Install-Module QRCodeGenerator -Scope CurrentUser -Force -ErrorAction SilentlyContinue
 
-# Verify core file
-if (-not (Test-Path "$Dest\WiFiQR.bat")) { 
-    Write-Host "[!] Download failed - check repo" -ForegroundColor Red; exit 1 
+# Verify install
+if (-not (Test-Path "$Dest\WiFiQR.bat")) {
+    Write-Host "[!] Install failed - missing core files" -ForegroundColor Red
+    exit 1
 }
 
-# Create shortcut (force Desktop path)
-$ShortcutPath = "$Desktop\$ShortcutName"
+# Create shortcut
+Write-Host "[+] Creating desktop shortcut..." -ForegroundColor Cyan
 $WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+$Shortcut = $WshShell.CreateShortcut("$Desktop\$ShortcutName")
 $Shortcut.TargetPath = "$Dest\WiFiQR.bat"
 $Shortcut.WorkingDirectory = $Dest
 $Shortcut.IconLocation = "shell32.dll,14"
 $Shortcut.Save()
-Write-Host "[+] Desktop shortcut: $ShortcutPath" -ForegroundColor Green
 
-# Add to PATH (fresh)
-$folderDir = $Dest
-$envPath = [Environment]::GetEnvironmentVariable("PATH", "User") -split ";"
-if ($envPath -notcontains $folderDir) {
-    $newPath = ($envPath + $folderDir) -join ";"
-    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-    Write-Host "[+] Added to PATH (restart shell)" -ForegroundColor Green
+# Add PATH properly
+Write-Host "[+] Adding to PATH..." -ForegroundColor Cyan
+$envPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($envPath -notlike "*$Dest*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$envPath;$Dest", "User")
 }
 
-# Add profile function (clean insert)
-$functionCode = "`nfunction WiFiQR { & `"$Dest\WiFiQR.bat`" }`n"
-if (-not (Get-Content $profilePath -Raw -ErrorAction SilentlyContinue -match 'function WiFiQR \{ \&')) {
-    "`n# WiFiQR Exporter$functionCode" | Add-Content -Path $profilePath -Encoding UTF8
-    Write-Host "[+] Profile function added (restart shell)" -ForegroundColor Green
-} else {
-    Write-Host "[~] Profile function exists" -ForegroundColor DarkGray
+# Add function to profile safely (NO duplicates)
+Write-Host "[+] Setting PowerShell function..." -ForegroundColor Cyan
+
+$functionBlock = @"
+# WiFiQR Exporter
+function WiFiQR { & "$Dest\WiFiQR.bat" }
+"@
+
+if (-not (Test-Path $PROFILE)) {
+    New-Item -Type File -Path $PROFILE -Force | Out-Null
 }
 
-Write-Host "`n✅ ZERO-ERROR INSTALL COMPLETE!" -ForegroundColor Green
-Write-Host "🖥️  Shortcut: $ShortcutPath" -ForegroundColor Cyan
+$profileText = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
+
+if ($profileText -notmatch "function WiFiQR") {
+    Add-Content -Path $PROFILE -Value $functionBlock -Encoding UTF8
+}
+
+Write-Host "`n✅ INSTALL COMPLETE!" -ForegroundColor Green
+Write-Host "🖥️  Shortcut: $Desktop\$ShortcutName" -ForegroundColor Cyan
 Write-Host "📁  Folder: $Dest" -ForegroundColor Cyan
-Write-Host "🚀  New shell: WiFiQR / $ShortcutName" -ForegroundColor Cyan
+Write-Host "🚀  Run: WiFiQR" -ForegroundColor Cyan
 
 explorer $Dest
