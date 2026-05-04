@@ -6,7 +6,7 @@ $Repo   = "abdullahkhalidlaptop/win-wifi-pass-qr"
 $Branch = "main"
 $Dest   = "$HOME\WiFiQR"
 
-Write-Host "`nWiFi QR Exporter Installer (CLEAN v3)" -ForegroundColor Cyan
+Write-Host "`nWiFi QR Exporter Installer" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor DarkGray
 
 # -----------------------------
