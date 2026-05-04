@@ -120,3 +120,10 @@ Write-Host "📁 Path: $Dest" -ForegroundColor Cyan
 Write-Host "🚀 Run: wifiqr" -ForegroundColor Cyan
 
 explorer $Dest
+
+Write-Host "`nClosing this window in 8 seconds...`n Open Powershell and Type WiFiQR to access it." -ForegroundColor DarkGray
+
+Start-Sleep -Seconds 8
+
+# Close current PowerShell window
+Stop-Process -Id $PID
