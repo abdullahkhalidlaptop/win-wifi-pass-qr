@@ -20,7 +20,7 @@ Instantly share your WiFi network with guests by letting them scan the QR code!
 
 ## One-Click Installation
 
-**Run this command in PowerShell (as Administrator recommended):**
+**Run this in PowerShell (as Administrator recommended):**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/abdullahkhalidlaptop/win-wifi-pass-qr/main/Install-WiFiQR.ps1 | iex"
