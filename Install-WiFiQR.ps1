@@ -1,37 +1,58 @@
 # ================================================
-#   WiFi QR Exporter - Production Installer (FIXED)
+# WiFi QR Exporter - Conflict-Free Installer v3
 # ================================================
 
 $Repo   = "abdullahkhalidlaptop/win-wifi-pass-qr"
 $Branch = "main"
-$IsAdmin = ([Security.Principal.WindowsPrincipal] `
-    [Security.Principal.WindowsIdentity]::GetCurrent()
-).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$Dest   = "$HOME\WiFiQR"
 
-# Choose install location properly
-if ($IsAdmin) {
-    $Dest = "C:\Scripts\WiFiQR"
-} else {
-    $Dest = "$HOME\WiFiQR"
-}
-
-$ShortcutName = "WiFi QR Exporter.lnk"
-
-Write-Host "`nWiFi QR Exporter Installer" -ForegroundColor Cyan
+Write-Host "`nWiFi QR Exporter Installer (CLEAN v3)" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor DarkGray
 
-# Desktop path (safe)
-$Desktop = [Environment]::GetFolderPath("Desktop")
+# -----------------------------
+# 1. REMOVE ALL OLD CONFLICTS
+# -----------------------------
+Write-Host "[+] Removing old functions..." -ForegroundColor Cyan
+Remove-Item Function:\wifiqr -ErrorAction SilentlyContinue
+Remove-Item Function:\WifiQR -ErrorAction SilentlyContinue
 
-# Cleanup old install
-Write-Host "[+] Cleaning previous install..." -ForegroundColor Cyan
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Dest
-Remove-Item -Force -ErrorAction SilentlyContinue "$Desktop\$ShortcutName"
+# Remove old install locations
+Write-Host "[+] Removing old installations..." -ForegroundColor Cyan
+Remove-Item "C:\Scripts\WiFiQR" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$HOME\WiFiQR" -Recurse -Force -ErrorAction SilentlyContinue
 
+# -----------------------------
+# 2. CLEAN POWERSHELL PROFILE
+# -----------------------------
+Write-Host "[+] Cleaning PowerShell profile..." -ForegroundColor Cyan
+
+if (Test-Path $PROFILE) {
+    $profileClean = Get-Content $PROFILE -ErrorAction SilentlyContinue |
+        Where-Object { $_ -notmatch "WiFiQR|wifiqr" }
+
+    Set-Content -Path $PROFILE -Value $profileClean -Encoding UTF8
+}
+
+# -----------------------------
+# 3. CLEAN PATH
+# -----------------------------
+Write-Host "[+] Cleaning PATH..." -ForegroundColor Cyan
+
+$currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($currentPath) {
+    $cleanPath = ($currentPath -split ";") |
+        Where-Object { $_ -and $_ -notmatch "WiFiQR|Scripts\\WiFiQR" }
+
+    [Environment]::SetEnvironmentVariable("PATH", ($cleanPath -join ";"), "User")
+}
+
+# -----------------------------
+# 4. INSTALL LOCATION
+# -----------------------------
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 
 # -----------------------------
-# Download files
+# 5. DOWNLOAD FILES
 # -----------------------------
 Write-Host "[+] Downloading files..." -ForegroundColor Cyan
 
@@ -49,54 +70,37 @@ foreach ($file in $files) {
 }
 
 # -----------------------------
-# Install QR module
+# 6. CREATE SAFE LAUNCHER
+# -----------------------------
+Write-Host "[+] Creating launcher..." -ForegroundColor Cyan
+
+@"
+@echo off
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0WiFiQR.ps1"
+"@ | Set-Content "$Dest\wifiqr.bat" -Encoding ASCII
+
+# -----------------------------
+# 7. INSTALL QR MODULE
 # -----------------------------
 Write-Host "[+] Installing QRCodeGenerator module..." -ForegroundColor Cyan
 Install-Module QRCodeGenerator -Scope CurrentUser -Force -ErrorAction SilentlyContinue
 
 # -----------------------------
-# Create dynamic launcher (FIX)
-# -----------------------------
-Write-Host "[+] Creating wifiqr launcher..." -ForegroundColor Cyan
-
-$batPath = "$Dest\wifiqr.bat"
-
-@"
-@echo off
-set SCRIPT_DIR=$Dest
-powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%\WiFiQR.ps1"
-"@ | Set-Content -Path $batPath -Encoding ASCII
-
-# -----------------------------
-# PATH setup (safe)
+# 8. UPDATE PATH SAFELY
 # -----------------------------
 Write-Host "[+] Updating PATH..." -ForegroundColor Cyan
 
-$currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($currentPath -notlike "*$Dest*") {
-    [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$Dest", "User")
+$envPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($envPath -notlike "*$Dest*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$envPath;$Dest", "User")
 }
 
 # -----------------------------
-# Shortcut
-# -----------------------------
-Write-Host "[+] Creating desktop shortcut..." -ForegroundColor Cyan
-
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$Desktop\$ShortcutName")
-$Shortcut.TargetPath = "$Dest\wifiqr.bat"
-$Shortcut.WorkingDirectory = $Dest
-$Shortcut.IconLocation = "shell32.dll,14"
-$Shortcut.Save()
-
-# -----------------------------
-# Optional PowerShell function
+# 9. OPTIONAL POWERSHELL FUNCTION (SAFE)
 # -----------------------------
 Write-Host "[+] Adding PowerShell function..." -ForegroundColor Cyan
 
-$profileLine = @"
-function wifiqr { & "$Dest\WiFiQR.ps1" }
-"@
+$func = 'function wifiqr { & "$HOME\WiFiQR\WiFiQR.ps1" }'
 
 if (-not (Test-Path $PROFILE)) {
     New-Item -ItemType File -Path $PROFILE -Force | Out-Null
@@ -105,15 +109,14 @@ if (-not (Test-Path $PROFILE)) {
 $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
 
 if ($profileContent -notmatch "function wifiqr") {
-    Add-Content -Path $PROFILE -Value "`n$profileLine`n"
+    Add-Content -Path $PROFILE -Value "`n$func`n"
 }
 
 # -----------------------------
-# Finish
+# 10. DONE
 # -----------------------------
-Write-Host "`n✅ INSTALL COMPLETE" -ForegroundColor Green
+Write-Host "`n✅ INSTALL COMPLETE (CLEAN STATE)" -ForegroundColor Green
 Write-Host "📁 Path: $Dest" -ForegroundColor Cyan
-Write-Host "🖥️ Shortcut: $Desktop\$ShortcutName" -ForegroundColor Cyan
 Write-Host "🚀 Run: wifiqr" -ForegroundColor Cyan
 
 explorer $Dest
